@@ -46,182 +46,131 @@ fn input_loop(input: String) -> String {
 }
 
 fn get_filenames(user: &str, pc: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let paths = [
+        format!("\\\\{pc}\\c$\\Users\\{user}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Extensions\\"),
+        format!("\\\\{pc}\\c$\\Users\\{user}\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Extensions\\"),
+        format!("\\\\{pc}\\c$\\users\\{user}\\AppData\\Local\\Microsoft\\Edge\\User Data\\Webstore Downloads\\"),
+    ];
 
-    // Create empty vectors for each file path - to store filenames if found
-    let mut chrome_files: Vec<String> = Vec::new();
-    let mut edge_one_files: Vec<String> = Vec::new();
-    let mut edge_two_files: Vec<String> = Vec::new(); 
+    let mut chrome_files = Vec::new();
+    let mut edge_one_files = Vec::new();
+    let mut edge_two_files = Vec::new();
 
-    // Default path for browser extensions, Chrome + Edge
-    let chrome_path_string = format!("\\\\{pc}\\c$\\Users\\{user}\\AppData\\Local\\Google\\Chrome\\User Data\\Default\\Extensions\\");
-    let edge_path_one_string = format!("\\\\{pc}\\c$\\Users\\{user}\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Extensions\\");
-    let edge_path_two_string = format!("\\\\{pc}\\c$\\users\\{user}\\AppData\\Local\\Microsoft\\Edge\\User Data\\Webstore Downloads\\");
+    for (i, path_str) in paths.iter().enumerate() {
+        let path = Path::new(path_str);
 
-    // Convert paths from string format to actual paths
-    let chrome_path = Path::new(&chrome_path_string);
-    let edge_path_one = Path::new(&edge_path_one_string);
-    let edge_path_two = Path::new(&edge_path_two_string);
- 
-    // Combine [Path]s into array
-    let paths_arr: [&Path; 3] = [chrome_path, edge_path_one, edge_path_two];
+        let files = if path.exists() {
+            println!("[-] Looking for files in {}", path.display().to_string());
 
+            path.read_dir()
+                .expect("[!] Read dir failed")
+                .filter_map(|file| {
+                    let file = file.expect("[!!!] Failed to read file");
 
+                    let file_name_str = file.path().file_name()?.to_str()?.to_owned();
 
-    // Two counters used to maintain consistency if one path returns nothing
-    let mut path_err_count = 1;
-    let mut file_path_counter = 0;
- 
-    for path in paths_arr {
-
-        // If path exists...
-        if path.exists() {
-
-            println!("[-] {} {}", "Looking for files in", path.display().to_string());
-
-            // Read each file in path
-            for file in path.read_dir().expect("[!] Read dir failed") {
-
-                // Checks to ignore default extensions for Chrome and Edge, google results return malware related query which is irrelevant
-                if file.as_ref().expect("[!!!] Failed to read file").path().file_name().unwrap().to_str().unwrap().to_owned() != "nmmhkkegccagdldgiimedpiccmgmieda"
-                    && file.as_ref().expect("[!!!] Failed to read file").path().file_name().unwrap().to_str().unwrap().to_owned() != "ghbmnnjooekpmoecnnnilnnbdlolhkhi"
-                    && file.as_ref().expect("[!!!] Failed to read file").path().file_name().unwrap().to_str().unwrap().to_owned() != "jmjflgjpcpepeafmmgdpfkogkghcpiha"
-                    && file.as_ref().expect("[!!!] Failed to read file").path().file_name().unwrap().to_str().unwrap().to_owned() != "Temp"
-                     {
-
-                // If file can be read, move file to string vector to maintain a list of file names
-                    if let Ok(file) = file {
-                        match file_path_counter {
-                            // Extract file name as string and push to string vector
-                            0 => chrome_files.push(file.path().file_name().unwrap().to_str().unwrap().to_owned()),
-                            1 => edge_one_files.push(file.path().file_name().unwrap().to_str().unwrap().to_owned()),
-                            2 => edge_two_files.push(file.path().file_name().unwrap().to_str().unwrap().to_owned()),
-
-                            _ => break,
-                        }
+                    if !should_ignore_file(&file_name_str) {
+                        Some(file_name_str)
+                    } else {
+                        None
                     }
-                }
-            }
-            // Loop into next file path, same again
-            file_path_counter += 1;
-
-        // If path is empty, push single 'No path found' to string vector
+                })
+                .collect()
         } else {
             println!("[!] No path found for {}\n", path.display().to_string());
-            match path_err_count {
-                1 => chrome_files.push("No path found".to_string()),
-                2 => edge_one_files.push("No path found".to_string()),
-                3 => edge_two_files.push("No path found".to_string()),
+            vec!["No path found".to_string()]
+        };
 
-                _ => println!("[?] How did this happen?"),
-            }
+        match i {
+            0 => chrome_files = files,
+            1 => edge_one_files = files,
+            2 => edge_two_files = files,
+            _ => println!("[?] How did this happen?"),
         }
-        path_err_count += 1
-    }  
+    }
 
-    return (chrome_files, edge_one_files, edge_two_files);
+    (chrome_files, edge_one_files, edge_two_files)
 }
 
+fn should_ignore_file(file_name: &str) -> bool {
+    let ignored_files = ["nmmhkkegccagdldgiimedpiccmgmieda", "ghbmnnjooekpmoecnnnilnnbdlolhkhi", "jmjflgjpcpepeafmmgdpfkogkghcpiha", "Temp"];
+    ignored_files.contains(&file_name)
+}
+
+
+fn process_arrays<T, U>(original_array: &[T], googled_array: &[U]) -> HashMap<String, String>
+where
+    T: AsRef<str>,
+    U: AsRef<str>,
+{
+    let mut result_dict = HashMap::new();
+
+    for (original_filename, google_result) in original_array.iter().zip(googled_array.iter()) {
+        let original_str = original_filename.as_ref();
+        let google_str = google_result.as_ref();
+
+        if original_str != "No path found" {
+            result_dict.insert(original_str.to_string(), google_str.to_string());
+        } else {
+            result_dict.insert("No path found".to_string(), "No path found".to_string());
+        }
+    }
+
+    result_dict
+}
+
+fn process_search(array: &Vec<String>) -> Vec<String> {
+
+    array
+        .into_iter()
+        .map(|filename| {
+            let filename_str = filename.as_ref();
+
+            if filename_str != "No path found" {
+                println!("[..] Identifying {}", filename_str);
+                search(filename_str)
+            } else {
+                "No path found".to_string()
+            }
+        })
+        .collect()
+}
+
+fn create_print_vector<T, U>(dictionary: &HashMap<T, U>) -> Vec<String>
+where
+    T: AsRef<str> + std::fmt::Display,
+    U: AsRef<str> + std::fmt::Display,
+{
+    dictionary
+        .iter()
+        .map(|(original_filename, google_result)| {
+            format!("{} - {}", original_filename, google_result)
+        })
+        .collect()
+}
 
 // This func needs to be refactored, lots of repeated code
 fn google_search(array_1: &Vec<String>, array_2: &Vec<String>, array_3: &Vec<String>) -> (String, String, String) {
 
 
-    // Empty hash maps used to map .crx filename to actual extension name, Key:Value pairs
-    let mut dictionary_1 = HashMap::new();
-    let mut dictionary_2 = HashMap::new();
-    let mut dictionary_3 = HashMap::new();
+    let googled_array_1 = process_search(array_1);
+    let googled_array_2 = process_search(array_2);
+    let googled_array_3 = process_search(array_3);
 
-    let mut googled_array_1: Vec<String> = Vec::new();
-    let mut googled_array_2: Vec<String> = Vec::new();
-    let mut googled_array_3: Vec<String> = Vec::new();
+    let dictionary_1 = process_arrays(&array_1, &googled_array_1);
+    let dictionary_2 = process_arrays(&array_2, &googled_array_2);
+    let dictionary_3 = process_arrays(&array_3, &googled_array_3);
 
-    // For file in list of filenames (array_1 = Chrome extension filenames etc..)
-    for filename in array_1 {
-        // If file names found, run search() func on filename. Else, treat as nothing found
-        if filename != "No path found" {
-            println!("[..] Identifying {}", filename.to_string());
-            googled_array_1.push(search(filename));
-
-        } else {
-            googled_array_1.push("No path found".to_string());
-        }
-    }
-
-    // Repeat of above for Edge (1) filenames
-    for filename in array_2 {
-        if filename != "No path found" {
-            println!("[..] Identifying {}", filename.to_string());
-            googled_array_2.push(search(filename));
-
-        } else {
-            googled_array_2.push("No path found".to_string());
-            }
-        }
-
-    // Repeat of above for Edge (2) filenames
-    for filename in array_3 {
-        if filename != "No path found" {
-            println!("[..] Identifying {}", filename.to_string());
-            googled_array_3.push(search(filename));
-
-        } else {
-            googled_array_3.push("No path found".to_string());
-            }
-        }
-
-    // Loops through .crx filename and result of search() func, adds .crx filename and actual extension name to hashmap
-    for (original_filename, google_result) in array_1.iter().zip(googled_array_1.iter()) {
-        if original_filename != "No path found" {
-            dictionary_1.insert(original_filename.to_string(), google_result.to_string());
-        } else {
-            dictionary_1.insert("No path found".to_string(), "No path found".to_string());
-        }
-    }
-
-    // Same as above
-    for (original_filename, google_result) in array_2.iter().zip(googled_array_2.iter()) {
-        if original_filename != "No path found" {
-            dictionary_2.insert(original_filename.to_string(), google_result.to_string());
-        } else {
-            dictionary_2.insert("No path found".to_string(), "No path found".to_string());
-        }
-    }
-
-    // Same as above
-    for (original_filename, google_result) in array_3.iter().zip(googled_array_3.iter()) {
-        if original_filename != "No path found" {
-            dictionary_3.insert(original_filename.to_string(), google_result.to_string());
-        } else {
-            dictionary_3.insert("No path found".to_string(), "No path found".to_string());
-        }
-    }
-
-    // String vecs to convert hashamp Key:Value pairs into single ".crx filename - extensions name"
-    let mut print_vec_1: Vec<String> = Vec::new();
-    let mut print_vec_2: Vec<String> = Vec::new();
-    let mut print_vec_3: Vec<String> = Vec::new();
-
-    for (original_filename, google_result) in &dictionary_1 {
-        let temp_var = format!("{} - {}", original_filename, google_result);
-        print_vec_1.push(temp_var);
-    }
-
-    for (original_filename, google_result) in &dictionary_2 {
-        let temp_var = format!("{} - {}", original_filename, google_result);
-        print_vec_2.push(temp_var);
-    }
-
-    for (original_filename, google_result) in &dictionary_3 {
-        let temp_var = format!("{} - {}", original_filename, google_result);
-        print_vec_3.push(temp_var);
-    }
+    let print_vec_1 = create_print_vector(&dictionary_1);
+    let print_vec_2 = create_print_vector(&dictionary_2);
+    let print_vec_3 = create_print_vector(&dictionary_3);
 
     // Convert string vecs into single string to make it easier to output. Join lines with <br> which is html newline/break
     let final_str_1 = print_vec_1.join("<br>");
     let final_str_2 = print_vec_2.join("<br>");
     let final_str_3 = print_vec_3.join("<br>");
 
-    return (final_str_1, final_str_2, final_str_3);
+    (final_str_1, final_str_2, final_str_3)
 
 }
 
