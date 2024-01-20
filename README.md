@@ -1,4 +1,4 @@
-# win-browser-extension-finder
+# Browser extension finder
 
 ## What it does
 
